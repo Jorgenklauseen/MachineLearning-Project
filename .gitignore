@@ -224,3 +224,5 @@ __marimo__/
 data/
 *.pt
 *.pth
+
+checkpoints/
