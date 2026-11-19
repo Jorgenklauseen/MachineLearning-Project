@@ -10,7 +10,7 @@ def load_trainval():
     dataset = OxfordIIITPet(DATA_DIR, split="trainval", target_types=TARGETS)
     train_idx, val_idx = train_test_split(
         list(range(len(dataset))),
-        test_size=0.2,
+        test_size=0.2, # 80 / 20 split
         shuffle=True,
         stratify=dataset._labels,  
         random_state=SPLIT_SEED,
