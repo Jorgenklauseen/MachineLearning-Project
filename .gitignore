@@ -226,3 +226,7 @@ data/
 *.pth
 
 checkpoints/
+
+#vscode
+.vs/
+.vscode/
