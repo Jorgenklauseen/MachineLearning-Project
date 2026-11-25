@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from data import DATA_DIR
+from src.data import DATA_DIR
 
 PET_DIR = DATA_DIR / "oxford-iiit-pet"
 VARIANTS = ["original", "pet_only", "bg_only"]

@@ -2,7 +2,12 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 from torchvision.datasets import OxfordIIITPet
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+# Project folders, used by all scripts
+ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = ROOT / "data"
+CHECKPOINT_DIR = ROOT / "checkpoints"
+RESULTS_DIR = ROOT / "results"
+FIG_DIR = RESULTS_DIR / "figures"
 TARGETS = ["category", "segmentation"]
 SPLIT_SEED = 42
 
