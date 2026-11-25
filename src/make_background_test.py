@@ -57,13 +57,21 @@ def pet_alpha(trimap):
     return alpha
 
 
-def make_pet_only(image, trimap):
+def make_fill(image, kind, rng):
+    """What replaces the removed pixels: constant grey, or uniform random noise."""
+    if kind == "grey":
+        return np.broadcast_to(GREY, image.shape)
+    return rng.integers(0, 256, size=image.shape, dtype=np.uint8)
+
+
+def make_pet_only(image, trimap, fill):
     a = pet_alpha(trimap)[..., None].astype(np.float32)
-    out = a * image + (1 - a) * GREY.astype(np.float32)
+    out = a * image + (1 - a) * fill.astype(np.float32)
     return np.clip(out + 0.5, 0, 255).astype(np.uint8)
 
 
-def make_bg_only(image, trimap, shape):
+def make_bg_only(image, trimap, shape, fill):
+    """Returns the image and the mask of hidden pixels."""
     pet = (trimap != 2).astype(np.uint8)
     if shape == "box":
         x, y, w, h = cv2.boundingRect(pet)
@@ -72,8 +80,8 @@ def make_bg_only(image, trimap, shape):
     else:
         hide = cv2.dilate(pet, disk(MASK_DILATE)).astype(bool)
     out = image.copy()
-    out[hide] = GREY
-    return out
+    out[hide] = fill[hide]
+    return out, hide
 
 
 def save_preview(path, examples):
@@ -90,6 +98,7 @@ def save_preview(path, examples):
             ax.set_yticks([])
         row[0].set_ylabel(name, fontsize=8)
     fig.tight_layout()
+    path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=110)
     plt.close(fig)
 
@@ -98,6 +107,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, default=DATA_DIR / "background_test")
     parser.add_argument("--bg-shape", choices=["box", "mask"], default="box")
+    parser.add_argument("--fill", choices=["grey", "noise"], default="grey",
+                        help="what replaces removed pixels; use a separate --out for each fill")
     parser.add_argument("--limit", type=int, help="lag bare N tilfeldig valgte bilder")
     parser.add_argument("--seed", type=int, default=42, help="seed for utvalget med --limit")
     parser.add_argument("--preview", type=Path, help="lagre et rutenett med eksempler hit")
@@ -119,9 +130,10 @@ def main():
     examples = []
     for i, row in enumerate(rows, 1):
         image, trimap = load(row["name"])
-        images = [image,
-                  make_pet_only(image, trimap),
-                  make_bg_only(image, trimap, args.bg_shape)]
+        fill = make_fill(image, args.fill, np.random.default_rng([args.seed, i]))  # same noise every run
+        bg_only, hide = make_bg_only(image, trimap, args.bg_shape, fill)
+        row["bg_share"] = round(float(1 - hide.mean()), 4)   # share of the image left in bg_only
+        images = [image, make_pet_only(image, trimap, fill), bg_only]
         for variant, img in zip(VARIANTS, images):
             Image.fromarray(img).save(args.out / variant / f"{row['name']}.png")
         if args.preview and len(examples) < args.preview_rows:
@@ -130,11 +142,11 @@ def main():
             print(f"{i}/{len(rows)} bilder")
 
     with open(args.out / "metadata.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["name", "breed", "class_id", "species"])
+        writer = csv.DictWriter(f, fieldnames=["name", "breed", "class_id", "species", "bg_share"])
         writer.writeheader()
         writer.writerows(rows)
     (args.out / "settings.txt").write_text(
-        f"bg_shape={args.bg_shape}\nlimit={args.limit}\nseed={args.seed}\n"
+        f"bg_shape={args.bg_shape}\nfill={args.fill}\nlimit={args.limit}\nseed={args.seed}\n"
         f"excluded={','.join(r['name'] for r in empty)}\n", encoding="utf-8")
 
     if args.preview:

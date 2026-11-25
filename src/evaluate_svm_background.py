@@ -42,7 +42,12 @@ def load_images(paths, color):
 
 
 def background_share(folder, names):
-    """Share of each bg_only image that is still background (not covered by grey)."""
+    """Share of each bg_only image that is still background (not covered by the fill).
+    Read from metadata.csv when it has the column (always with the noise fill)."""
+    with open(folder / "metadata.csv", newline="", encoding="utf-8") as f:
+        saved = {r["name"]: r.get("bg_share") for r in csv.DictReader(f)}
+    if all(saved.get(n) not in (None, "") for n in names):
+        return np.array([float(saved[n]) for n in names])
     shares = []
     for name in names:
         img = np.asarray(Image.open(folder / "bg_only" / f"{name}.png").convert("RGB"))
@@ -94,6 +99,8 @@ def main():
     parser.add_argument("--data", type=Path, default=DATA_DIR / "background_test")
     parser.add_argument("--checkpoints", type=Path, default=ROOT / "checkpoints")
     parser.add_argument("--out", type=Path, default=ROOT / "results")
+    parser.add_argument("--tag", default="",
+                        help="added to the output file names, e.g. _noise for the noise-filled images")
     args = parser.parse_args()
 
     names, y, breeds = read_metadata(args.data)
@@ -140,8 +147,8 @@ def main():
     if not summary:
         raise SystemExit("\nNo SVM models found, nothing to evaluate.")
     args.out.mkdir(parents=True, exist_ok=True)
-    write_csv(args.out / "experiment2_svm_summary.csv", summary)
-    write_csv(args.out / "experiment2_svm_predictions.csv", predictions)
+    write_csv(args.out / f"experiment2_svm{args.tag}_summary.csv", summary)
+    write_csv(args.out / f"experiment2_svm{args.tag}_predictions.csv", predictions)
 
 
 if __name__ == "__main__":
