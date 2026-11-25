@@ -63,6 +63,20 @@ def make_param_grid(color=False):
     return grid
 
 
+def best_saved_params(color=False):
+    """Best setting from an earlier full grid search (the CSV is sorted by CV accuracy)."""
+    with open(results_file(color), newline="") as file:
+        best = next(csv.DictReader(file))
+    ppc = int(best["ppc"])
+    bins = int(best["bins"]) if color else None
+    params = {"features__hog__ppc": ppc, "svc__kernel": best["kernel"], "svc__C": float(best["C"])}
+    if color:
+        params["features__color__bins"] = bins
+    if best["kernel"] == "rbf":   # gamma was searched as a factor times 1 / number of features
+        params["svc__gamma"] = int(best["gamma_factor"]) / n_features(ppc, color, bins)
+    return params
+
+
 def save_results(search, color=False):
     r = search.cv_results_
     rows = []
@@ -96,22 +110,31 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--color", action="store_true",
                         help="HOG + HSV color histogram instead of HOG on grayscale only")
-    color = parser.parse_args().color
+    parser.add_argument("--saved-grid", action="store_true",
+                        help="skip the grid search and refit the best setting in "
+                             "results/svm_gridsearch*.csv from an earlier full run")
+    args = parser.parse_args()
+    color = args.color
     print(f"Variant: {'HOG + color histogram' if color else 'HOG (grayscale)'}")
 
     dataset, train_idx, val_idx = load_trainval()
     X_train, y_train = load_images(dataset, train_idx, color)
     X_val, y_val = load_images(dataset, val_idx, color)
 
-    # 1. Choose settings with 5-fold CV on the training data. The test set is not used here.
-    cv = StratifiedKFold(K, shuffle=True, random_state=SPLIT_SEED)
-    search = GridSearchCV(build_svm(color), make_param_grid(color), cv=cv,
-                          scoring="accuracy", n_jobs=N_JOBS, verbose=2)
-    search.fit(X_train, y_train)   # finally refits the best setup on the full training split
-    save_results(search, color)
-
-    model = search.best_estimator_
-    print(f"\nSelected:{search.best_params_}")
+    if args.saved_grid:
+        # Same model as the grid search's final refit, without repeating the 200 CV fits
+        params = best_saved_params(color)
+        model = build_svm(color).set_params(**params).fit(X_train, y_train)
+        print(f"\nSelected (from {results_file(color).name}): {params}")
+    else:
+        # 1. Choose settings with 5-fold CV on the training data. The test set is not used here.
+        cv = StratifiedKFold(K, shuffle=True, random_state=SPLIT_SEED)
+        search = GridSearchCV(build_svm(color), make_param_grid(color), cv=cv,
+                              scoring="accuracy", n_jobs=N_JOBS, verbose=2)
+        search.fit(X_train, y_train)   # finally refits the best setup on the full training split
+        save_results(search, color)
+        model = search.best_estimator_
+        print(f"\nSelected:{search.best_params_}")
     print(f"Validation: accuracy={model.score(X_val, y_val):.4f}")
 
     path = model_path(color)
