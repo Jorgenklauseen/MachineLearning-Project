@@ -113,11 +113,20 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="seed for utvalget med --limit")
     parser.add_argument("--preview", type=Path, help="lagre et rutenett med eksempler hit")
     parser.add_argument("--preview-rows", type=int, default=6)
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="do nothing if --out already holds a finished run with the same settings")
     args = parser.parse_args()
+
+    settings = f"bg_shape={args.bg_shape}\nfill={args.fill}\nlimit={args.limit}\nseed={args.seed}\n"
+    done = args.out / "settings.txt"   # written last, so it only exists after a finished run
+    if args.skip_existing and done.exists() and done.read_text(encoding="utf-8").startswith(settings):
+        print(f"{args.out} is already made with these settings, skipping")
+        return
 
     rows, empty = [], []
     for row in read_test_split():
-        (rows if (load(row["name"])[1] == 1).any() else empty).append(row)
+        trimap = np.asarray(Image.open(PET_DIR / "annotations" / "trimaps" / f"{row['name']}.png"))
+        (rows if (trimap == 1).any() else empty).append(row)
     print(f"Utelater {len(empty)} bilder uten dyr i trimapen:", ", ".join(r["name"] for r in empty))
 
     if args.limit:
@@ -135,7 +144,8 @@ def main():
         row["bg_share"] = round(float(1 - hide.mean()), 4)   # share of the image left in bg_only
         images = [image, make_pet_only(image, trimap, fill), bg_only]
         for variant, img in zip(VARIANTS, images):
-            Image.fromarray(img).save(args.out / variant / f"{row['name']}.png")
+            # PNG is lossless at every level; level 1 only makes the files larger and much faster to write
+            Image.fromarray(img).save(args.out / variant / f"{row['name']}.png", compress_level=1)
         if args.preview and len(examples) < args.preview_rows:
             examples.append((row["name"], images))
         if i % 200 == 0 or i == len(rows):
@@ -145,9 +155,7 @@ def main():
         writer = csv.DictWriter(f, fieldnames=["name", "breed", "class_id", "species", "bg_share"])
         writer.writeheader()
         writer.writerows(rows)
-    (args.out / "settings.txt").write_text(
-        f"bg_shape={args.bg_shape}\nfill={args.fill}\nlimit={args.limit}\nseed={args.seed}\n"
-        f"excluded={','.join(r['name'] for r in empty)}\n", encoding="utf-8")
+    done.write_text(settings + f"excluded={','.join(r['name'] for r in empty)}\n", encoding="utf-8")
 
     if args.preview:
         save_preview(args.preview, examples)
