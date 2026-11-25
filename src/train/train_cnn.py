@@ -60,8 +60,9 @@ def make_loaders(debug):
 
 
 def train_one_epoch(model, loader, loss_fn, optimizer, device):
+    """Returns (loss, accuracy) on the training data, measured while training (with augmentation)."""
     model.train()
-    total_loss = 0.0
+    total_loss, correct = 0.0, 0
     for images, labels in loader:
         images, labels = images.to(device), labels.to(device)
 
@@ -72,18 +73,21 @@ def train_one_epoch(model, loader, loss_fn, optimizer, device):
         optimizer.step()
 
         total_loss += loss.item() * len(labels)
-    return total_loss / len(loader.dataset)
+        correct += (outputs.argmax(dim=1) == labels).sum().item()
+    return total_loss / len(loader.dataset), correct / len(loader.dataset)
 
 
 @torch.no_grad()
-def evaluate(model, loader, device):
+def evaluate(model, loader, loss_fn, device):
+    """Returns (loss, accuracy) on the validation data."""
     model.eval()
-    correct = 0
+    total_loss, correct = 0.0, 0
     for images, labels in loader:
         images, labels = images.to(device), labels.to(device)
-        predictions = model(images).argmax(dim=1)
-        correct += (predictions == labels).sum().item()
-    return correct / len(loader.dataset)
+        outputs = model(images)
+        total_loss += loss_fn(outputs, labels).item() * len(labels)
+        correct += (outputs.argmax(dim=1) == labels).sum().item()
+    return total_loss / len(loader.dataset), correct / len(loader.dataset)
 
 
 def save_history(path, history):
@@ -101,18 +105,11 @@ def load_checkpoint(path, device="cpu"):
     return checkpoint, {}
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", required=True)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--debug", action="store_true")
-    args = parser.parse_args()
-
-    set_seed(args.seed)
+def train(args, seed):
+    """Trains one model with one seed. Returns the best validation accuracy."""
+    set_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Device:", device)
+    print(f"\n=== {args.model}, seed {seed} (device: {device}) ===")
 
     train_loader, val_loader = make_loaders(args.debug)
     model = build_model(args.model).to(device)
@@ -120,7 +117,7 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
-    run_name = f"{args.model}_seed{args.seed}" + ("_debug" if args.debug else "")
+    run_name = f"{args.model}_seed{seed}" + ("_debug" if args.debug else "")
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     checkpoint_path = CHECKPOINT_DIR / f"{run_name}.pt"
@@ -130,13 +127,15 @@ def main():
     best_val_accuracy = -1.0
     for epoch in range(1, args.epochs + 1):
         lr = optimizer.param_groups[0]["lr"]
-        train_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
-        val_accuracy = evaluate(model, val_loader, device)
+        train_loss, train_accuracy = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
+        val_loss, val_accuracy = evaluate(model, val_loader, loss_fn, device)
         scheduler.step()
-        print(f"Epoch {epoch}: lr={lr:.2e}, loss={train_loss:.4f}, val_accuracy={val_accuracy:.4f}")
+        print(f"Epoch {epoch}: lr={lr:.2e}, train loss={train_loss:.4f} acc={train_accuracy:.4f}, "
+              f"val loss={val_loss:.4f} acc={val_accuracy:.4f}")
 
-        history.append({"epoch": epoch, "lr": lr, "train_loss": round(train_loss, 4),
-                        "val_accuracy": round(val_accuracy, 4)})
+        history.append({"epoch": epoch, "lr": lr,
+                        "train_loss": round(train_loss, 4), "train_accuracy": round(train_accuracy, 4),
+                        "val_loss": round(val_loss, 4), "val_accuracy": round(val_accuracy, 4)})
         save_history(history_path, history)
 
         if val_accuracy > best_val_accuracy:
@@ -146,11 +145,30 @@ def main():
                 "model": args.model,
                 "epoch": epoch,
                 "val_accuracy": val_accuracy,
+                "seed": seed,
                 "args": vars(args),
             }, checkpoint_path)
 
     print(f"Best val_accuracy: {best_val_accuracy:.4f}")
     print(f"Saved {checkpoint_path} and {history_path}")
+    return best_val_accuracy
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--seeds", "--seed", nargs="+", type=int, default=[0],
+                        help="one or more seeds, trained one after another, e.g. --seeds 0 1 2")
+    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--debug", action="store_true")
+    args = parser.parse_args()
+
+    best = {seed: train(args, seed) for seed in args.seeds}
+    if len(best) > 1:
+        values = np.array(list(best.values()))
+        print(f"\nBest val_accuracy per seed: {', '.join(f'{s}: {v:.4f}' for s, v in best.items())}")
+        print(f"Mean: {values.mean():.4f} +/- {values.std(ddof=1):.4f}")
 
 
 if __name__ == "__main__":
