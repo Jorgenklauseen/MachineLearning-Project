@@ -1,0 +1,38 @@
+breed,n_test,predicted,correct,recall,precision
+Sphynx,100,157,32,0.3200,0.2038
+Egyptian Mau,97,125,31,0.3196,0.2480
+Bombay,88,156,28,0.3182,0.1795
+Newfoundland,100,99,25,0.2500,0.2525
+Havanese,100,144,22,0.2200,0.1528
+Bengal,100,145,22,0.2200,0.1517
+Keeshond,99,91,20,0.2020,0.2198
+Maine Coon,100,121,18,0.1800,0.1488
+Persian,100,113,18,0.1800,0.1593
+German Shorthaired,100,112,18,0.1800,0.1607
+Pug,100,67,17,0.1700,0.2537
+Basset Hound,100,115,17,0.1700,0.1478
+Birman,100,88,14,0.1400,0.1591
+Japanese Chin,100,78,14,0.1400,0.1795
+English Setter,100,125,14,0.1400,0.1120
+Leonberger,100,99,14,0.1400,0.1414
+Russian Blue,100,92,14,0.1400,0.1522
+American Bulldog,100,113,13,0.1300,0.1150
+Scottish Terrier,99,72,11,0.1111,0.1528
+Great Pyrenees,100,126,11,0.1100,0.0873
+Yorkshire Terrier,100,78,11,0.1100,0.1410
+English Cocker Spaniel,100,122,11,0.1100,0.0902
+Ragdoll,100,93,11,0.1100,0.1183
+Beagle,100,98,11,0.1100,0.1122
+Staffordshire Bull Terrier,89,78,9,0.1011,0.1154
+British Shorthair,100,96,10,0.1000,0.1042
+Abyssinian,98,112,9,0.0918,0.0804
+Pomeranian,100,84,9,0.0900,0.1071
+Chihuahua,100,78,9,0.0900,0.1154
+Boxer,99,82,8,0.0808,0.0976
+Samoyed,100,67,8,0.0800,0.1194
+Saint Bernard,100,80,7,0.0700,0.0875
+Siamese,100,90,7,0.0700,0.0778
+Wheaten Terrier,100,61,6,0.0600,0.0984
+Shiba Inu,100,65,4,0.0400,0.0615
+Miniature Pinscher,100,74,4,0.0400,0.0541
+American Pit Bull Terrier,100,73,3,0.0300,0.0411
