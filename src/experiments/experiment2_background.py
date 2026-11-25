@@ -2,7 +2,8 @@
 
 Evaluates every trained model (SVMs and CNNs) on the three variants made by
 make_background_test.py (original, pet_only, bg_only) and writes one shared table.
-Models without a checkpoint are skipped.
+Models without a checkpoint are skipped. With several seeds, each CNN also gets rows with the
+mean, std and median over the seeds for every variant.
 
 Examples:
     python -m src.experiments.experiment2_background                  # all models, CNN seed 0
@@ -19,7 +20,8 @@ from sklearn.metrics import f1_score
 
 from src.data import DATA_DIR, RESULTS_DIR, SPLIT_SEED
 from src.experiments.common_evaluation import (ALL_MODELS, SVM_MODELS, bootstrap_ci, checkpoint_path,
-                                              load_model, predict, run_name, test_split, write_csv)
+                                              load_model, predict, run_name, seed_summary, test_split,
+                                              write_csv)
 
 PET_DIR = DATA_DIR / "oxford-iiit-pet"
 VARIANTS = ["original", "pet_only", "bg_only"]
@@ -42,13 +44,13 @@ def background_share(folder, names):
     return np.array(shares)
 
 
-def summarize(model, variant, y, pred, pred_orig, breeds, rng):
+def summarize(model, seed, variant, y, pred, pred_orig, breeds, rng):
     correct = (pred == y).astype(float)
     acc, acc_orig = correct.mean(), (pred_orig == y).mean()
     lo, hi = bootstrap_ci(correct, rng)
     counts = np.bincount(pred, minlength=len(breeds))
     return {
-        "model": model, "variant": variant, "n": len(y),
+        "model": model, "seed": "" if seed is None else seed, "variant": variant, "n": len(y),
         "accuracy": acc, "ci_low": lo, "ci_high": hi,
         "macro_f1": f1_score(y, pred, average="macro", labels=range(len(breeds)), zero_division=0),
         "rel_change": (acc - acc_orig) / acc_orig if acc_orig > 0 else np.nan,
@@ -85,6 +87,7 @@ def main():
 
     summary, predictions = [], []
     for model_name in args.models:
+        model_rows = []
         for seed in ([None] if model_name in SVM_MODELS else args.seeds):
             name = run_name(model_name, seed)
             if not checkpoint_path(model_name, seed).exists():
@@ -100,21 +103,33 @@ def main():
                   f"{(pred_jpg == preds['original']).mean():.1%} of images")
 
             rng = np.random.default_rng(SPLIT_SEED)
-            rows = [summarize(name, v, y, preds[v], preds["original"], breeds, rng) for v in VARIANTS]
+            rows = [summarize(model_name, seed, v, y, preds[v], preds["original"], breeds, rng) for v in VARIANTS]
             for b in range(len(BG_BINS) - 1):
                 m = bg_bin == b
                 if m.any():
                     label = f"bg_only [{BG_BINS[b]:.0%}-{min(BG_BINS[b + 1], 1):.0%} bg]"
-                    rows.append(summarize(name, label, y[m], preds["bg_only"][m],
+                    rows.append(summarize(model_name, seed, label, y[m], preds["bg_only"][m],
                                           preds["original"][m], breeds, rng))
             for r in rows:
                 print_row(r)
-            summary += rows
+            model_rows += rows
 
             for i, n in enumerate(names):
                 predictions.append({"model": name, "name": n, "true": breeds[y[i]],
                                     "bg_share": round(float(bg_share[i]), 4),
                                     **{f"pred_{v}": breeds[preds[v][i]] for v in VARIANTS}})
+
+        # Mean, std and median over the seeds, per variant
+        summary += model_rows
+        n_seeds = len({r["seed"] for r in model_rows})
+        if n_seeds > 1:
+            print(f"\n{model_name}, mean +/- std over {n_seeds} seeds:")
+            for variant in dict.fromkeys(r["variant"] for r in model_rows):
+                stats = seed_summary([r for r in model_rows if r["variant"] == variant],
+                                     ["accuracy", "macro_f1", "rel_change", "changed_answers"])
+                print(f"  {variant:<22} acc={stats[0]['accuracy']:6.1%} +/- {stats[1]['accuracy']:4.1%}  "
+                      f"changed={stats[0]['changed_answers']:5.1%}")
+                summary += stats
 
     if not summary:
         raise SystemExit("\nNo trained models found, nothing to evaluate.")

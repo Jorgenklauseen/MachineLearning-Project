@@ -103,6 +103,21 @@ def bootstrap_ci(correct, rng):
     return np.percentile(correct[idx].mean(axis=1), [2.5, 97.5])
 
 
+def seed_summary(rows, metrics, keep=("model", "variant", "n")):
+    """One row per seed for the same model -> three rows with mean, std and median over the seeds.
+
+    Columns in `metrics` are aggregated, columns in `keep` are copied, the rest are left empty.
+    """
+    out = []
+    for stat, fn in [("mean", np.mean), ("std", lambda v: np.std(v, ddof=1)), ("median", np.median)]:
+        row = {k: (rows[0][k] if k in keep else "") for k in rows[0]}
+        row["seed"] = stat
+        for m in metrics:
+            row[m] = float(fn([r[m] for r in rows]))
+        out.append(row)
+    return out
+
+
 def write_csv(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8") as f:
