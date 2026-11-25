@@ -1,6 +1,5 @@
 import argparse
 import csv
-from pathlib import Path
 
 import joblib
 import numpy as np
@@ -8,18 +7,16 @@ from sklearn.base import clone
 from sklearn.metrics import f1_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 
-from data import SPLIT_SEED, load_test, load_trainval
-from models import SVM_IMAGE_SIZE, build_svm
-
-ROOT = Path(__file__).resolve().parents[1]
+from src.data import CHECKPOINT_DIR, RESULTS_DIR, SPLIT_SEED, load_test, load_trainval
+from src.models.svm import SVM_IMAGE_SIZE, build_svm
 
 
 def model_path(color=False):
-    return ROOT / "checkpoints" / ("svm_hog_color.joblib" if color else "svm_hog.joblib")
+    return CHECKPOINT_DIR / ("svm_hog_color.joblib" if color else "svm_hog.joblib")
 
 
 def results_file(color=False):
-    return ROOT / "results" / ("svm_gridsearch_color.csv" if color else "svm_gridsearch.csv")
+    return RESULTS_DIR / ("svm_gridsearch_color.csv" if color else "svm_gridsearch.csv")
 
 
 PPC_VALUES = [16, 24, 32, 42]

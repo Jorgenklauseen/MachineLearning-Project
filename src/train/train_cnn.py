@@ -1,7 +1,6 @@
 import argparse
 import csv
 import random
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -10,12 +9,10 @@ from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
 from torchvision.datasets import OxfordIIITPet
 
-from data import DATA_DIR, load_trainval
-from models import build_model
+from src.data import CHECKPOINT_DIR, DATA_DIR, RESULTS_DIR, load_trainval
+from src.models.cnn import build_model
 
-ROOT = Path(__file__).resolve().parents[1]
-CHECKPOINT_DIR = ROOT / "checkpoints"
-HISTORY_DIR = ROOT / "results" / "training"
+HISTORY_DIR = RESULTS_DIR / "training"
 IMAGE_SIZE = 224
 BATCH_SIZE = 32
 MEAN = [0.485, 0.456, 0.406]

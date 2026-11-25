@@ -1,9 +1,9 @@
 """Grad-CAM heatmaps: which parts of a test image the model bases its prediction on.
 
 Examples:
-    python src/gradcam.py --model resnet50
-    python src/gradcam.py --model pet_cnn --wrong     # only misclassified images
-    python src/gradcam.py --variant bg_only           # images from make_background_test.py
+    python -m src.experiments.gradcam --model resnet50
+    python -m src.experiments.gradcam --model pet_cnn --wrong     # only misclassified images
+    python -m src.experiments.gradcam --variant bg_only           # images from make_background_test.py
 """
 import argparse
 import csv
@@ -20,9 +20,9 @@ from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from torchvision import transforms
 from torchvision.datasets import OxfordIIITPet
 
-from data import DATA_DIR, SPLIT_SEED
-from models import build_model
-from train_cnn import CHECKPOINT_DIR, IMAGE_SIZE, ROOT, eval_transform, load_checkpoint
+from src.data import CHECKPOINT_DIR, DATA_DIR, FIG_DIR, SPLIT_SEED
+from src.models.cnn import build_model
+from src.train.train_cnn import IMAGE_SIZE, eval_transform, load_checkpoint
 
 # Same resize and crop as eval_transform, but without normalisation, for display
 view_transform = transforms.Compose([transforms.Resize((256, 256)), transforms.CenterCrop(IMAGE_SIZE)])
@@ -90,7 +90,7 @@ def main():
 
     fig.suptitle(f"Grad-CAM, {run_name}, {args.variant}" + (" (misclassified)" if args.wrong else ""))
     fig.tight_layout()
-    out = ROOT / "results" / "figures" / f"gradcam_{run_name}_{args.variant}{'_wrong' if args.wrong else ''}.png"
+    out = FIG_DIR / f"gradcam_{run_name}_{args.variant}{'_wrong' if args.wrong else ''}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Saved {out}")
