@@ -1,4 +1,5 @@
 import argparse
+import csv
 import random
 from pathlib import Path
 
@@ -12,7 +13,9 @@ from torchvision.datasets import OxfordIIITPet
 from data import DATA_DIR, load_trainval
 from models import build_model
 
-CHECKPOINT_DIR = Path(__file__).resolve().parents[1] / "checkpoints"
+ROOT = Path(__file__).resolve().parents[1]
+CHECKPOINT_DIR = ROOT / "checkpoints"
+HISTORY_DIR = ROOT / "results" / "training"
 IMAGE_SIZE = 224
 BATCH_SIZE = 32
 MEAN = [0.485, 0.456, 0.406]
@@ -26,8 +29,10 @@ train_transform = transforms.Compose([
     transforms.Normalize(MEAN, STD),
 ])
 
+# Same scale as training (resize to 256, then 224 crop), but centred and without randomness
 eval_transform = transforms.Compose([
-    transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+    transforms.Resize((256, 256)),
+    transforms.CenterCrop(IMAGE_SIZE),
     transforms.ToTensor(),
     transforms.Normalize(MEAN, STD),
 ])
@@ -84,6 +89,21 @@ def evaluate(model, loader, device):
     return correct / len(loader.dataset)
 
 
+def save_history(path, history):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=history[0].keys())
+        writer.writeheader()
+        writer.writerows(history)
+
+
+def load_checkpoint(path, device="cpu"):
+    """Returns (state_dict, metadata). Also reads old checkpoints that only hold a state_dict."""
+    checkpoint = torch.load(path, map_location=device)
+    if "model_state" in checkpoint:
+        return checkpoint["model_state"], {k: v for k, v in checkpoint.items() if k != "model_state"}
+    return checkpoint, {}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True)
@@ -101,21 +121,39 @@ def main():
     model = build_model(args.model).to(device)
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
+    run_name = f"{args.model}_seed{args.seed}" + ("_debug" if args.debug else "")
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = CHECKPOINT_DIR / f"{args.model}_seed{args.seed}.pt"
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = CHECKPOINT_DIR / f"{run_name}.pt"
+    history_path = HISTORY_DIR / f"{run_name}.csv"
 
+    history = []
     best_val_accuracy = -1.0
     for epoch in range(1, args.epochs + 1):
+        lr = optimizer.param_groups[0]["lr"]
         train_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
         val_accuracy = evaluate(model, val_loader, device)
-        print(f"Epoch {epoch}: loss={train_loss:.4f}, val_accuracy={val_accuracy:.4f}")
+        scheduler.step()
+        print(f"Epoch {epoch}: lr={lr:.2e}, loss={train_loss:.4f}, val_accuracy={val_accuracy:.4f}")
+
+        history.append({"epoch": epoch, "lr": lr, "train_loss": round(train_loss, 4),
+                        "val_accuracy": round(val_accuracy, 4)})
+        save_history(history_path, history)
 
         if val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
-            torch.save(model.state_dict(), checkpoint_path)
+            torch.save({
+                "model_state": model.state_dict(),
+                "model": args.model,
+                "epoch": epoch,
+                "val_accuracy": val_accuracy,
+                "args": vars(args),
+            }, checkpoint_path)
 
     print(f"Best val_accuracy: {best_val_accuracy:.4f}")
+    print(f"Saved {checkpoint_path} and {history_path}")
 
 
 if __name__ == "__main__":
