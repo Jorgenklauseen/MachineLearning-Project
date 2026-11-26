@@ -222,10 +222,10 @@ __marimo__/
 
 # Prosjekt
 data/
-*.pt
+#*.pt
 *.pth
 
-checkpoints/
+#checkpoints/
 
 #vscode
 .vs/
