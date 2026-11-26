@@ -5,13 +5,17 @@ make_background_test.py (original, pet_only, bg_only) and writes one shared tabl
 Models without a checkpoint are skipped. With several seeds, each CNN also gets rows with the
 mean, std and median over the seeds for every variant.
 
+If the output files already exist, only the rows for the models evaluated now are replaced, so a
+new model can be added without running the others again.
+
 Examples:
     python -m src.experiments.experiment2_background                  # all models, CNN seed 0
     python -m src.experiments.experiment2_background --seeds 0 1 2    # CNNs with three training seeds
-    python -m src.experiments.experiment2_background --models svm_hog_color resnet50
+    python -m src.experiments.experiment2_background --models pet_cnn_v2 --seeds 0 1 2   # add one model
 """
 import argparse
 import csv
+import re
 from pathlib import Path
 
 import numpy as np
@@ -60,6 +64,16 @@ def summarize(model, seed, variant, y, pred, pred_orig, breeds, rng):
     }
 
 
+def keep_other_models(path, rows, models):
+    """Old rows in path for models not in models, followed by the new rows."""
+    if not path.exists():
+        return rows
+    with open(path, newline="", encoding="utf-8") as f:
+        # The predictions file names runs like pet_cnn_seed0, so strip the seed to get the model
+        old = [r for r in csv.DictReader(f) if re.sub(r"_seed\d+$", "", r["model"]) not in models]
+    return old + rows
+
+
 def print_row(r):
     print(f"  {r['variant']:<22} n={r['n']:<5} acc={r['accuracy']:6.1%} "
           f"[{r['ci_low']:5.1%}, {r['ci_high']:5.1%}]  F1={r['macro_f1']:.3f}  "
@@ -98,10 +112,6 @@ def main():
             preds = {v: predict(model_name, model, [args.data / v / f"{n}.png" for n in names])
                      for v in VARIANTS}
 
-            pred_jpg = predict(model_name, model, [PET_DIR / "images" / f"{n}.jpg" for n in names])
-            print(f"  check: original PNG vs JPG give the same prediction for "
-                  f"{(pred_jpg == preds['original']).mean():.1%} of images")
-
             rng = np.random.default_rng(SPLIT_SEED)
             rows = [summarize(model_name, seed, v, y, preds[v], preds["original"], breeds, rng) for v in VARIANTS]
             for b in range(len(BG_BINS) - 1):
@@ -133,8 +143,9 @@ def main():
 
     if not summary:
         raise SystemExit("\nNo trained models found, nothing to evaluate.")
-    write_csv(args.out / "experiment2_summary.csv", summary)
-    write_csv(args.out / "experiment2_predictions.csv", predictions)
+    evaluated = {r["model"] for r in summary}
+    for filename, rows in [("experiment2_summary.csv", summary), ("experiment2_predictions.csv", predictions)]:
+        write_csv(args.out / filename, keep_other_models(args.out / filename, rows, evaluated))
 
 
 if __name__ == "__main__":

@@ -15,9 +15,11 @@ Each model is evaluated with one training seed: by default the seed with median 
 the same one the figures in experiment 1 use. If experiment 2 has been run, each image is also linked
 to whether its prediction changed when the background was removed (pet_only).
 
+If the output files already exist, only the rows for the models evaluated now are replaced.
+
 Examples:
     python -m src.experiments.gradcam_share
-    python -m src.experiments.gradcam_share --models pet_cnn
+    python -m src.experiments.gradcam_share --models pet_cnn_v2
 """
 import argparse
 import csv
@@ -31,11 +33,11 @@ from torchvision import transforms
 
 from src.data import COMPARISON_DIR, DATA_DIR
 from src.experiments.common_evaluation import BATCH_SIZE, DEVICE, load_model, run_name, test_split, write_csv
-from src.experiments.experiment2_background import PET_DIR, read_metadata
+from src.experiments.experiment2_background import PET_DIR, keep_other_models, read_metadata
 from src.train.train_cnn import IMAGE_SIZE, eval_transform
 
 BG_DIR = DATA_DIR / "background_test"
-SEEDS = {"resnet50": 1, "pet_cnn": 2}  # median test accuracy over seeds 0-2, as in experiment 1
+SEEDS = {"resnet50": 1, "pet_cnn": 2, "pet_cnn_v2": 2}  # median test accuracy over seeds 0-2, as in experiment 1
 # The trimap gets the same resize and crop as the image, with nearest neighbour so the labels stay 1, 2, 3
 mask_transform = transforms.Compose([
     transforms.Resize((256, 256), interpolation=transforms.InterpolationMode.NEAREST),
@@ -115,7 +117,7 @@ def main():
         print(f"  share when correct {row['share_correct']:.1%}, when wrong {row['share_wrong']:.1%}")
 
         changed = None
-        if changes:
+        if any(run == name for run, _ in changes):
             changed = np.array([changes.get((name, n), False) for n in names])
             row.update({"n_changed_pet_only": int(changed.sum()),
                         "share_unchanged_pet_only": share[~changed].mean(),
@@ -124,6 +126,9 @@ def main():
             print(f"  share when pet_only kept the prediction {row['share_unchanged_pet_only']:.1%}, "
                   f"changed it {row['share_changed_pet_only']:.1%} (n={row['n_changed_pet_only']}), "
                   f"correlation {row['corr_share_changed']:+.3f}")
+        else:
+            print(f"  {name} is not in experiment2_predictions.csv: run experiment 2 for it to link attention "
+                  f"to accuracy changes")
         summary.append({k: float(v) if isinstance(v, np.floating) else v for k, v in row.items()})
 
         for i, n in enumerate(names):
@@ -132,8 +137,9 @@ def main():
                               "peak_on_pet": int(peak[i]),
                               "changed_pet_only": "" if changed is None else int(changed[i])})
 
-    write_csv(COMPARISON_DIR / "gradcam_share_summary.csv", summary)
-    write_csv(COMPARISON_DIR / "gradcam_share_per_image.csv", per_image)
+    # Rows for models not evaluated now are kept, so one model can be added without running the others
+    for filename, rows in [("gradcam_share_summary.csv", summary), ("gradcam_share_per_image.csv", per_image)]:
+        write_csv(COMPARISON_DIR / filename, keep_other_models(COMPARISON_DIR / filename, rows, set(args.models)))
 
 
 if __name__ == "__main__":
