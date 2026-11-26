@@ -22,7 +22,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 N_BOOT = 2000
 
 SVM_MODELS = {"svm_hog": False, "svm_hog_color": True}  # name -> uses colour
-CNN_MODELS = ["resnet50", "resnet50_untrained", "pet_cnn"]
+CNN_MODELS = ["resnet50", "resnet50_untrained", "pet_cnn", "pet_cnn_v2"]
 ALL_MODELS = [*SVM_MODELS, *CNN_MODELS]
 LABELS = {
     "svm_hog": "HOG + SVM",
@@ -30,6 +30,7 @@ LABELS = {
     "resnet50": "ResNet-50 (pretrained)",
     "resnet50_untrained": "ResNet-50 (from scratch)",
     "pet_cnn": "PetCNN",
+    "pet_cnn_v2": "PetCNN v2",
 }
 
 

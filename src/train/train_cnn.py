@@ -25,6 +25,19 @@ train_transform = transforms.Compose([
     transforms.Normalize(MEAN, STD),
 ])
 
+# Stronger augmentation for models trained from scratch: random scale and position, and mild
+# colour changes. No hue shift, since fur colour is what separates some breeds.
+strong_train_transform = transforms.Compose([
+    transforms.RandomResizedCrop(IMAGE_SIZE, scale=(0.35, 1.0)),
+    transforms.RandomHorizontalFlip(),
+    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2),
+    transforms.ToTensor(),
+    transforms.Normalize(MEAN, STD),
+])
+
+# Models not listed here use train_transform
+TRAIN_TRANSFORMS = {"pet_cnn_v2": strong_train_transform}
+
 # Same scale as training (resize to 256, then 224 crop), but centred and without randomness
 eval_transform = transforms.Compose([
     transforms.Resize((256, 256)),
@@ -41,13 +54,13 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 
-def make_loaders(debug):
+def make_loaders(model, debug):
     _, train_idx, val_idx = load_trainval()
     if debug:
         train_idx, val_idx = train_idx[:64], val_idx[:64]
 
-    train_ds = OxfordIIITPet(DATA_DIR, split="trainval",
-                             target_types="category", transform=train_transform)
+    train_ds = OxfordIIITPet(DATA_DIR, split="trainval", target_types="category",
+                             transform=TRAIN_TRANSFORMS.get(model, train_transform))
     val_ds = OxfordIIITPet(DATA_DIR, split="trainval",
                            target_types="category", transform=eval_transform)
 
@@ -56,6 +69,15 @@ def make_loaders(debug):
     val_loader = DataLoader(Subset(val_ds, val_idx), batch_size=BATCH_SIZE,
                             num_workers=2)
     return train_loader, val_loader
+
+
+def make_scheduler(optimizer, epochs, warmup):
+    """Cosine decay over all epochs, optionally after a linear warmup from 10 % of the learning rate."""
+    cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs - warmup)
+    if warmup == 0:
+        return cosine
+    ramp = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, total_iters=warmup)
+    return torch.optim.lr_scheduler.SequentialLR(optimizer, [ramp, cosine], milestones=[warmup])
 
 
 def train_one_epoch(model, loader, loss_fn, optimizer, device):
@@ -110,11 +132,13 @@ def train(args, seed):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"\n=== {args.model}, seed {seed} (device: {device}) ===")
 
-    train_loader, val_loader = make_loaders(args.debug)
+    train_loader, val_loader = make_loaders(args.model, args.debug)
     model = build_model(args.model).to(device)
-    loss_fn = nn.CrossEntropyLoss()
+    # Label smoothing only in the training loss, so val loss stays comparable between models
+    train_loss_fn = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
+    eval_loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+    scheduler = make_scheduler(optimizer, args.epochs, args.warmup)
 
     run_name = f"{args.model}_seed{seed}" + ("_debug" if args.debug else "")
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
@@ -126,8 +150,8 @@ def train(args, seed):
     best_val_accuracy = -1.0
     for epoch in range(1, args.epochs + 1):
         lr = optimizer.param_groups[0]["lr"]
-        train_loss, train_accuracy = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
-        val_loss, val_accuracy = evaluate(model, val_loader, loss_fn, device)
+        train_loss, train_accuracy = train_one_epoch(model, train_loader, train_loss_fn, optimizer, device)
+        val_loss, val_accuracy = evaluate(model, val_loader, eval_loss_fn, device)
         scheduler.step()
         print(f"Epoch {epoch}: lr={lr:.2e}, train loss={train_loss:.4f} acc={train_accuracy:.4f}, "
               f"val loss={val_loss:.4f} acc={val_accuracy:.4f}")
@@ -160,6 +184,9 @@ def main():
                         help="one or more seeds, trained one after another, e.g. --seeds 0 1 2")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--warmup", type=int, default=0,
+                        help="epochs of linear learning rate warmup before the cosine decay")
+    parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
