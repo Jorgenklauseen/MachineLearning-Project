@@ -7,7 +7,7 @@ from sklearn.base import clone
 from sklearn.metrics import f1_score
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 
-from src.data import CHECKPOINT_DIR, RESULTS_DIR, SPLIT_SEED, load_test, load_trainval
+from src.data import CHECKPOINT_DIR, SPLIT_SEED, load_test, load_trainval, model_dir
 from src.models.svm import SVM_IMAGE_SIZE, build_svm
 
 
@@ -16,7 +16,7 @@ def model_path(color=False):
 
 
 def results_file(color=False):
-    return RESULTS_DIR / ("svm_gridsearch_color.csv" if color else "svm_gridsearch.csv")
+    return model_dir("svm_hog") / ("svm_gridsearch_color.csv" if color else "svm_gridsearch.csv")
 
 
 PPC_VALUES = [16, 24, 32, 42]

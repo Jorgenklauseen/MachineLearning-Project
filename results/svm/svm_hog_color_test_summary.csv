@@ -1,0 +1,2 @@
+model,seed,n,accuracy,ci_low,ci_high,macro_f1
+svm_hog_color,,3669,0.139,0.1278,0.1502,0.1349

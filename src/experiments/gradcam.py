@@ -20,7 +20,7 @@ from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from torchvision import transforms
 from torchvision.datasets import OxfordIIITPet
 
-from src.data import CHECKPOINT_DIR, DATA_DIR, FIG_DIR, SPLIT_SEED
+from src.data import CHECKPOINT_DIR, DATA_DIR, SPLIT_SEED, fig_dir
 from src.models.cnn import build_model
 from src.train.train_cnn import IMAGE_SIZE, eval_transform, load_checkpoint
 
@@ -61,7 +61,7 @@ def main():
     order = np.random.default_rng(SPLIT_SEED).permutation(len(paths))
 
     cols = 3 if args.wrong else 2
-    fig, axes = plt.subplots(args.n, cols, figsize=(3 * cols, 3 * args.n), squeeze=False)
+    fig, axes = plt.subplots(args.n, cols, figsize=(3 * cols, 3 * args.n), squeeze=False, layout="constrained")
     row = 0
     with GradCAM(model=model, target_layers=[layer]) as cam:
         for i in order:
@@ -89,8 +89,7 @@ def main():
                 break
 
     fig.suptitle(f"Grad-CAM, {run_name}, {args.variant}" + (" (misclassified)" if args.wrong else ""))
-    fig.tight_layout()
-    out = FIG_DIR / f"gradcam_{run_name}_{args.variant}{'_wrong' if args.wrong else ''}.png"
+    out = fig_dir(args.model) / f"gradcam_{run_name}_{args.variant}{'_wrong' if args.wrong else ''}.png"
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Saved {out}")

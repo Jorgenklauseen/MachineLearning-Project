@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image
 from sklearn.metrics import f1_score
 
-from src.data import DATA_DIR, RESULTS_DIR, SPLIT_SEED
+from src.data import COMPARISON_DIR, DATA_DIR, SPLIT_SEED
 from src.experiments.common_evaluation import (ALL_MODELS, SVM_MODELS, bootstrap_ci, checkpoint_path,
                                               load_model, predict, run_name, seed_summary, test_split,
                                               write_csv)
@@ -72,7 +72,7 @@ def main():
     parser.add_argument("--models", nargs="+", choices=ALL_MODELS, default=ALL_MODELS)
     parser.add_argument("--seeds", nargs="+", type=int, default=[0], help="training seeds (CNNs only)")
     parser.add_argument("--data", type=Path, default=DATA_DIR / "background_test")
-    parser.add_argument("--out", type=Path, default=RESULTS_DIR)
+    parser.add_argument("--out", type=Path, default=COMPARISON_DIR)
     args = parser.parse_args()
 
     if not (args.data / "metadata.csv").exists():

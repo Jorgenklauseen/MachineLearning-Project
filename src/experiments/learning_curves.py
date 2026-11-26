@@ -1,6 +1,6 @@
 """Learning curves: loss and accuracy per epoch, for training and validation.
 
-Reads the history files that train_cnn.py writes (results/training/<model>_seed<n>.csv) and
+Reads the history files that train_cnn.py writes (results/<model>/training/<model>_seed<n>.csv) and
 saves one figure per model. With several seeds, the line is the mean over the seeds and the
 shaded band shows the lowest and highest seed.
 
@@ -16,10 +16,9 @@ import numpy as np
 import pandas as pd
 from matplotlib.ticker import MaxNLocator, PercentFormatter
 
-from src.data import FIG_DIR, RESULTS_DIR
+from src.data import fig_dir, history_dir
 from src.experiments.common_evaluation import CNN_MODELS, LABELS
 
-HISTORY_DIR = RESULTS_DIR / "training"
 # Training and validation: two colours, and dashed vs. solid so they also differ in black and white
 SPLITS = {"train": ("Training", "#2a78d6", "--"), "val": ("Validation", "#eb6834", "-")}
 INK, MUTED, GRID = "#1f1f1e", "#6b6a64", "#e6e5e0"
@@ -28,7 +27,7 @@ INK, MUTED, GRID = "#1f1f1e", "#6b6a64", "#e6e5e0"
 def load_histories(model, seeds):
     histories = []
     for seed in seeds:
-        path = HISTORY_DIR / f"{model}_seed{seed}.csv"
+        path = history_dir(model) / f"{model}_seed{seed}.csv"
         if path.exists():
             histories.append(pd.read_csv(path))
         else:
@@ -70,7 +69,6 @@ def main():
     parser.add_argument("--seeds", nargs="+", type=int, default=[0])
     args = parser.parse_args()
 
-    FIG_DIR.mkdir(parents=True, exist_ok=True)
     for model in args.models:
         histories = load_histories(model, args.seeds)
         if not histories:
@@ -88,7 +86,8 @@ def main():
         ax_acc.legend(loc="lower right", frameon=False, labelcolor=INK)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
 
-        out = FIG_DIR / f"learning_curves_{model}.png"
+        out = fig_dir(model) / f"learning_curves_{model}.png"
+        out.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print(f"Saved {out}")

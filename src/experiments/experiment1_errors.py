@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 from sklearn.metrics import confusion_matrix, f1_score
 
-from src.data import FIG_DIR, RESULTS_DIR, SPLIT_SEED
+from src.data import SPLIT_SEED, fig_dir, model_dir
 from src.experiments.common_evaluation import (ALL_MODELS, LABELS, SVM_MODELS, bootstrap_ci, load_model,
                                               predict, run_name, seed_summary, test_split, write_csv)
 
@@ -36,10 +36,11 @@ def show(ax, path):
     ax.axis("off")
 
 
-def plot_pairs(paths, names, y, pred, pairs, filename, title):
+def plot_pairs(paths, names, y, pred, pairs, out, title):
     rng = np.random.default_rng(SPLIT_SEED)
+    # Constrained layout leaves room for the suptitle, so it does not cover the titles of the first row
     fig, axes = plt.subplots(len(pairs), PER_PAIR + 1, squeeze=False,
-                             figsize=(9, 3.3 * len(pairs)))
+                             figsize=(9, 3.3 * len(pairs)), layout="constrained")
     for row, (t, p) in enumerate(pairs):
         wrong = np.flatnonzero((y == t) & (pred == p))
         chosen = rng.choice(wrong, min(PER_PAIR, len(wrong)), replace=False)
@@ -51,10 +52,9 @@ def plot_pairs(paths, names, y, pred, pairs, filename, title):
         show(axes[row, -1], paths[rng.choice(np.flatnonzero(y == p))])
         axes[row, -1].set_title(f"Example of\n{names[p]}", fontsize=8)
     fig.suptitle(title)
-    fig.tight_layout()
-    fig.savefig(FIG_DIR / filename, dpi=200, bbox_inches="tight")
+    fig.savefig(out, dpi=200, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved {FIG_DIR / filename}")
+    print(f"Saved {out}")
 
 
 def per_class_stats(y, pred, n_classes):
@@ -87,11 +87,11 @@ def save_per_class(names, stats_per_seed, path):
     write_csv(path, rows)
 
 
-def plot_correct(paths, names, y, pred, classes, stats, filename, title):
+def plot_correct(paths, names, y, pred, classes, stats, out, title):
     n_test, predicted, correct, recall, precision = stats
     rng = np.random.default_rng(SPLIT_SEED)
     fig, axes = plt.subplots(len(classes), PER_CORRECT, squeeze=False,
-                             figsize=(9, 3.3 * len(classes)))
+                             figsize=(9, 3.3 * len(classes)), layout="constrained")
     for row, c in enumerate(classes):
         hits = np.flatnonzero((y == c) & (pred == c))
         chosen = rng.choice(hits, min(PER_CORRECT, len(hits)), replace=False)
@@ -104,10 +104,9 @@ def plot_correct(paths, names, y, pred, classes, stats, filename, title):
             f"precision {precision[c]:.2f} ({correct[c]}/{predicted[c]})",
             fontsize=9)
     fig.suptitle(title)
-    fig.tight_layout(rect=(0, 0, 1, 0.99))
-    fig.savefig(FIG_DIR / filename, dpi=200, bbox_inches="tight")
+    fig.savefig(out, dpi=200, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved {FIG_DIR / filename}")
+    print(f"Saved {out}")
 
 
 def main():
@@ -120,7 +119,8 @@ def main():
     name = args.model
     seeds = [None] if args.model in SVM_MODELS else args.seeds
     paths, y, names = test_split()
-    FIG_DIR.mkdir(parents=True, exist_ok=True)
+    figs = fig_dir(name)
+    figs.mkdir(parents=True, exist_ok=True)
 
     # Overall result, one row per seed
     preds, summary, stats_per_seed = [], [], []
@@ -145,8 +145,8 @@ def main():
         rep = int(np.argsort([r["accuracy"] for r in summary])[len(seeds) // 2])
         print(f"Figures and confusion lists use seed {seeds[rep]} (median accuracy)")
         summary += [mean, std, median]
-    write_csv(RESULTS_DIR / f"{name}_test_summary.csv", summary)
-    save_per_class(names, stats_per_seed, RESULTS_DIR / f"{name}_per_class.csv")
+    write_csv(model_dir(name) / f"{name}_test_summary.csv", summary)
+    save_per_class(names, stats_per_seed, model_dir(name) / f"{name}_per_class.csv")
 
     pred, stats = preds[rep], stats_per_seed[rep]
     label = LABELS[args.model] + ("" if seeds[rep] is None else f", seed {seeds[rep]}")
@@ -158,7 +158,7 @@ def main():
     for c in best:
         print(f"  {names[c]}: recall={recall[c]:.2f}, precision={stats[4][c]:.2f}, "
               f"predicted {stats[1][c]} times, {stats[2][c]} correct of {stats[0][c]}")
-    plot_correct(paths, names, y, pred, best, stats, f"{name}_correct_examples.png",
+    plot_correct(paths, names, y, pred, best, stats, figs / f"{name}_correct_examples.png",
                  f"Breeds with highest recall, {label} (test)")
 
     # Wrong predictions: the most common confusions
@@ -184,7 +184,7 @@ def main():
         for start in range(0, len(pairs), ROWS_PER_FIG):
             part = start // ROWS_PER_FIG + 1
             plot_pairs(paths, names, y, pred, pairs[start:start + ROWS_PER_FIG],
-                       f"{filename}_{part}.png", f"{title} ({part}), {label} (test)")
+                       figs / f"{filename}_{part}.png", f"{title} ({part}), {label} (test)")
 
 
 if __name__ == "__main__":

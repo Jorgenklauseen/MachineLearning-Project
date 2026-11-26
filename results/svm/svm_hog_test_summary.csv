@@ -1,0 +1,2 @@
+model,seed,n,accuracy,ci_low,ci_high,macro_f1
+svm_hog,,3669,0.1145,0.1041,0.1248,0.1099

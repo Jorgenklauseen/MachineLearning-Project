@@ -9,10 +9,9 @@ from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
 from torchvision.datasets import OxfordIIITPet
 
-from src.data import CHECKPOINT_DIR, DATA_DIR, RESULTS_DIR, load_trainval
+from src.data import CHECKPOINT_DIR, DATA_DIR, history_dir, load_trainval
 from src.models.cnn import build_model
 
-HISTORY_DIR = RESULTS_DIR / "training"
 IMAGE_SIZE = 224
 BATCH_SIZE = 32
 MEAN = [0.485, 0.456, 0.406]
@@ -119,9 +118,9 @@ def train(args, seed):
 
     run_name = f"{args.model}_seed{seed}" + ("_debug" if args.debug else "")
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
-    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    history_dir(args.model).mkdir(parents=True, exist_ok=True)
     checkpoint_path = CHECKPOINT_DIR / f"{run_name}.pt"
-    history_path = HISTORY_DIR / f"{run_name}.csv"
+    history_path = history_dir(args.model) / f"{run_name}.csv"
 
     history = []
     best_val_accuracy = -1.0
